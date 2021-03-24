@@ -7,27 +7,12 @@ const app = express();
 
 
 const pagesrc = `
-<html>
- <head>
- </head>
- <body>
-  <h1> Test Form </h1>
-  <form method="POST" action="./submit/">
-   What is your name? <br>
-   <input type='text' name='name'></input>
-   <br>
-   <input type="submit" value="Go"></input>
- </body>
-</html>
 `
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(express.static('static'));
 
-// respond with "hello world" when a GET request is made to the homepage
-app.get('/', function (req, res) {
-  res.send(pagesrc)
-})
 
 app.post('/submit', function (req, res) {
   console.log(req.body);
