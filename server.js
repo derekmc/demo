@@ -6,9 +6,6 @@ const bodyParser = require('body-parser');
 const app = express();
 
 
-const pagesrc = `
-`
-
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('static'));
