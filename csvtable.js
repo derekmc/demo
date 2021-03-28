@@ -1,25 +1,29 @@
 
 //const csv = require('csv');
 const fs = require('fs');
+const telnet = require('telnet');
 
-// A table is indexed by the first column, for the running program,
-// but stored in any order.
+// If autoid is on, the table is indexed, by an automatically generated id.
+// Otherwise, A table is indexed by the first column.
+// For a given database, it is recommended not to switch between autoid and manual id.
 
 function Table(headers, props){
 
   if(!props) props = {};
   if(!headers) headers = [];
+  let ids = {};
+
   checkType(headers, "array");
   checkType(props, "object");
 
   let quoted = props['quoted']? true : false;
   let autoid = props['autoid']? true : false; // generate an id, instead of using first entry.
-  let autonumbers = props['autonumbers']? true : false;
+  let autoparse = props['autoparse']? true : false;
   let filename = props['filename']? props['filename'] : null;
 
   // checkType(quoted, "boolean");
   // checkType(autoid, "boolean");
-  // checkType(autonumbers, "boolean");
+  // checkType(autoparse, "boolean");
   if(filename) checkType(filename, "string");
 
   // store autoids for live table no matter what,
@@ -28,7 +32,8 @@ function Table(headers, props){
 
   let table = {
     headers: headers,
-    rows: {},
+    rows: [],
+    ids: {},
   };
 
 
@@ -46,16 +51,26 @@ function Table(headers, props){
     if(row.length == 0){
       throw new Error("csvtable: row must not be empty."); }
   }
+  function getRowId(key){
+    if(!table.ids.hasOwnProperty(key)){
+      return -1;
+    }
+    return table.ids[key];
+  }
 
   table.addRow = (row)=>{
     checkRow(row);
-    //check if row exists.
-    let key = row[0];
-    if(table.hasOwnProperty(key)){
+    let key = autoid? currentAutoId: row[0];
+    if(!autoid && table.hasOwnProperty(key)){
+      return false;
     }
-    return key;
-  }
+    
+    let rowid = currentAutoId++;
+    table.ids[key] = rowid;
 
+    table.rows[rowid] = row;
+    return rowid;
+  }
   table.setProp = (name, value)=>{
     if(name == "quoted"){
       checkType(value, 'boolean');
@@ -74,9 +89,9 @@ function Table(headers, props){
       }
       autoid = value;
     }
-    if(name == "autonumbers"){
+    if(name == "autoparse"){
       checkType(value, 'boolean');
-      autonumbers = value;
+      autoparse = value;
     }
     if(name == "filename"){
       checkType(value, 'string');
@@ -85,25 +100,30 @@ function Table(headers, props){
   }
 
   table.getRow = (key)=>{
-    if(!table.rows.hasOwnProperty(key)){
-      return null;
-    }
+    let rowid = getRowId(key);
+    if(rowid == -1) return null;
+    return table.rows[rowid];
     return table.rows[key];
   }
-  table.setRow = (row)=>{
+  // id is optional, and only used if autoid is true.
+  table.setRow = (row, id)=>{
     checkRow(row);
-    let key = row[0];
-    table.rows[key]
+    let rowid = autoid? id : getRowId(row[0]);
+    if(rowid==null || rowid == undefined || rowid < 0){
+      rowid = currentAutoId++;
+      throw new Error("unknown row");
+    }
+    table.rows[rowid] = row;
   }
   table.deleteRow = (key)=>{
+    let rowid = getRowId(key);
+    if(rowid < 0) return false;
     if(!table.rows.hasOwnProperty(key)){
       return false;
     }
-    delete table.rows[key];
+    delete table.ids[key];
+    delete table.rows[rowid];
     return true;
-  }
-  table.setFile = (f)=>{
-    filename = f;
   }
   function rowToString(row){
     for(let i=0; i<row.length; ++i){
@@ -130,6 +150,8 @@ function Table(headers, props){
       }
       if(c == "," || i == s.length-1){
         let entry;
+        // back up to trim whitespace
+        while(s[i-1]== " " || s[i-1] == "\t") --i;
         if(fullquote && s[i-1] == "\""){
           let str = "";
           try{
@@ -145,6 +167,8 @@ function Table(headers, props){
         }
         row.push(entry);
         fullquote = true;
+        // we backed up to trim whitespace, go forward to comma again.
+        while(s[i] == " " || s[i] == "\t") ++i;
       }
       if(c == "\n"){
         throw new Error("csvtable, internal function 'parseRow' encountered unexpected newline character.");
@@ -173,7 +197,6 @@ function Table(headers, props){
       stream.on('finish', after);
     }
     //for(let row of 
-   
   }
 }
 
@@ -184,73 +207,109 @@ function TableServer(folder){
 
   let tables = {};
 
-  return function(req, res){
-    // Note: table names are not case sensitive.
-    // There are 3 types of commands, general commands, table commands, and row commands
-    //
-    // generalcommand ...
-    //   saveall, loadall
-    //
-    // tablecommand tablename ...
-    //   newtable, rmtable, setprop, save, load
-    // 
-    // rowcommand tablename rowindex ...
-    //   addrow, getrow, setrow, delrow
-    // 
-    //
-    //let command = "newtable TestTable file.csv a b c d e f g";
-    let command = "addrow TestTable  33 22 33 44 33 22 33";
-    let parts = command.split(/\s+/);
-    let action = parts[0];
-    let tablename = parts[1];
-    let table = tables[tablename];
+  // this is a telnet server
+  // 'https://www.npmjs.com/package/telnet'
+  return function(client){
+    client.do.transmit_binary();
+    client.do.window_size();
 
-    if(action == "saveall"){
-
-    }
-    if(action == "loadall"){
-
-    }
-    if(action == "newtable"){
-      let filename = parts[2];
-      let columns = parts.slice(3);
-      if(tablename in tables){
-        throw new Error(`newtable: Table ${tablename} already exists.`);
+    client.on('window size', function (e) {
+      if (e.command === 'sb') {
+        //console.log('telnet window resized to %d x %d', e.width, e.height)
       }
-      tables[tablename] = Table(filename, columns);
+    })
+    let line = "";
+    client.on('data', function (b) {
+      let n = line.length;
+      line += b.toString("utf-8");
+      let nextline = "";
+      for(let i=n; i<line.length; ++i){
+        if(line[i] == "\n"){
+          nextline = line.substring(i);
+          line = line.substring(0, i);
+          TableCommand(line);
+          line = nextline;
+          i = 0;
+          n = nextline.length;
+        }
+      }
+      // client.write(b);
+    })
+       
+    function TableCommand(line){
+      // Note: table names are not case sensitive.
+      // There are 3 types of commands, general commands, table commands, and row commands
+      //
+      // generalcommand ...
+      //   saveall, loadall
+      //
+      // tablecommand tablename ...
+      //   newtable, rmtable, setprop, save, load
+      // 
+      // rowcommand tablename rowindex ...
+      //   addrow, getrow, setrow, delrow
+      // 
+      //
+      //let command = "newtable TestTable file.csv a b c d e f g";
+      //let command = "addrow TestTable  33 22 33 44 33 22 33";
+      let parts = command.split(/\s+/);
+      let action = parts[0];
+      let tablename = parts.length > 1? parts[1] : "";
+      let table = tables[tablename];
+
+      if(action == "saveall"){
+        for(let tablename of tables){
+          let table = tables[tablename];
+          table.save(()=> client.write("All tables saved.\n"));
+        }
+      }
+      if(action == "loadall"){
+        for(let tablename of tables){
+          let table = tables[tablename];
+          table.load(()=> client.write("All tables loaded.\n"));
+        }
+      }
+      if(action == "newtable"){
+        let filename = parts[2];
+        let columns = parts.slice(3);
+        if(tablename in tables){
+          throw new Error(`newtable: Table ${tablename} already exists.`);
+        }
+        tables[tablename] = Table(filename, columns);
+      }
+      if(action == "rmtable"){
+        let row = parts.slice(2);
+        table.delRow(row);
+      }
+      if(action == "setprop"){
+      }
+      if(action == "save"){
+        let row = parts.slice(2);
+        table.delRow(row);
+      }
+      if(action == "load"){
+        let row = parts.slice(2);
+        table.delRow(row);
+      }
+      if(action == "addrow"){
+        let row = parts.slice(2);
+        table.addRow(row);
+      }
+      if(action == "getrow"){
+        let key = parts[2];
+        table.getRow(key);
+      }
+      if(action == "setrow"){
+        let row = parts.slice(2);
+        table.setRow(row);
+      }
+      if(action == "delrow"){
+        let row = parts.slice(2);
+        table.delRow(row);
+      }
     }
-    if(action == "rmtable"){
-      let row = parts.slice(2);
-      table.delRow(row);
-    }
-    if(action == "setprop"){
-    }
-    if(action == "save"){
-      let row = parts.slice(2);
-      table.delRow(row);
-    }
-    if(action == "load"){
-      let row = parts.slice(2);
-      table.delRow(row);
-    }
-    if(action == "addrow"){
-      let row = parts.slice(2);
-      table.addRow(row);
-    }
-    if(action == "getrow"){
-      let key = parts[2];
-      table.getRow(key);
-    }
-    if(action == "setrow"){
-      let row = parts.slice(2);
-      table.setRow(row);
-    }
-    if(action == "delrow"){
-      let row = parts.slice(2);
-      table.delRow(row);
-    }
-    
   }
 }
+
 
 module.exports = Table;
