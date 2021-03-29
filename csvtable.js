@@ -3,23 +3,29 @@
 const fs = require('fs');
 const telnet = require('telnet');
 
+// regexes
+const FloatRegex = /^[+-]?\d+(\.\d+)?$/;
+const HexRegex = /0x[0-9a-fA-F]+$/;
+const BigIntRegex = /^[+-]?\d+n$/;
+
 // If autoid is on, the table is indexed, by an automatically generated id.
 // Otherwise, A table is indexed by the first column.
 // For a given database, it is recommended not to switch between autoid and manual id.
 
-function Table(headers, props){
+function Table(headers, options){
 
-  if(!props) props = {};
+  if(!options) options = {};
   if(!headers) headers = [];
   let ids = {};
 
   checkType(headers, "array");
-  checkType(props, "object");
+  checkType(options, "object");
 
-  let quoted = props['quoted']? true : false;
-  let autoid = props['autoid']? true : false; // generate an id, instead of using first entry.
-  let autoparse = props['autoparse']? true : false;
-  let filename = props['filename']? props['filename'] : null;
+  let quoted = options['quoted']? true : false;
+  let autoid = options['autoid']? true : false; // generate an id, instead of using first entry.
+  let autoparse = options['autoparse']? true : false;
+  let filename = options['filename']? options['filename'] : null;
+  let folder = options['folder']? options['folder'] : '.';
 
   // checkType(quoted, "boolean");
   // checkType(autoid, "boolean");
@@ -111,7 +117,6 @@ function Table(headers, props){
     let rowid = autoid? id : getRowId(row[0]);
     if(rowid==null || rowid == undefined || rowid < 0){
       rowid = currentAutoId++;
-      throw new Error("unknown row");
     }
     table.rows[rowid] = row;
   }
@@ -125,6 +130,30 @@ function Table(headers, props){
     delete table.rows[rowid];
     return true;
   }
+  table.save = (after)=>{
+    let stream = fs.createWriteStream(filename);
+    if(after){
+      if(typeof after != "function"){
+        throw new Error("csvtable table.save(after): after must be a function.");
+      }
+      stream.on('finish', after);
+    }
+    for(let key of table.rows){
+      let row = table.rows[key];
+    }
+  }
+  table.load = (after)=>{
+    let stream = fs.createReadStream(filename);
+    if(after){
+      if(typeof after != "function"){
+        throw new Error("csvtable table.load(after): after must be a function.");
+      }
+      stream.on('finish', after);
+    }
+    //for(let row of 
+  }
+  return table;
+
   function rowToString(row){
     for(let i=0; i<row.length; ++i){
       let entry = "" + row[i];
@@ -139,8 +168,8 @@ function Table(headers, props){
     for(let i=0; i<s.length; ++i){
       let c = s[i];
       // trim leading whitespace
-      if(i == j && c == " "){
-        ++j;
+      if(i == j && (c == " " || c == "\t")){
+        while(s[j] == " " || s[j] == "\t") ++j;
       }
       if(c == "\"" || c == "\'"){
         quotechar = c;
@@ -165,6 +194,15 @@ function Table(headers, props){
         } else {
           entry = s.substring(j, i); 
         }
+        if(autoparse){
+          if(entry == "true") entry = true;
+          if(entry == "false") entry = false;
+          if(entry == "null") entry = null;
+          if(entry == "undefined") entry = undefined;
+          if(entry.match(FloatRegex)) entry = parseFloat(entry);
+          if(entry.match(BigIntRegex)) entry = BigInt(entry);
+          if(entry.match(HexRegex)) entry = parseInt(entry, 16);
+        }
         row.push(entry);
         fullquote = true;
         // we backed up to trim whitespace, go forward to comma again.
@@ -176,36 +214,17 @@ function Table(headers, props){
     }
     return row;
   }
-  table.save = (after)=>{
-    let stream = fs.createWriteStream(filename);
-    if(after){
-      if(typeof after != "function"){
-        throw new Error("csvtable table.save(after): after must be a function.");
-      }
-      stream.on('finish', after);
-    }
-    for(let key of table.rows){
-      let row = table.rows[key];
-    }
-  }
-  table.load = (after)=>{
-    let stream = fs.createReadStream(filename);
-    if(after){
-      if(typeof after != "function"){
-        throw new Error("csvtable table.load(after): after must be a function.");
-      }
-      stream.on('finish', after);
-    }
-    //for(let row of 
-  }
 }
 
-function TableServer(folder){
-  if(folder === undefined){
-    folder = ".";
-  }
+Table.HttpServer = TableHttpServer;
+Table.TelnetServer = TableTelnetServer;
+
+function TableHttpServer(options){
+}
+function TableTelnetServer(options){
 
   let tables = {};
+  if(!options) options= {};
 
   // this is a telnet server
   // 'https://www.npmjs.com/package/telnet'
@@ -227,7 +246,7 @@ function TableServer(folder){
         if(line[i] == "\n"){
           nextline = line.substring(i);
           line = line.substring(0, i);
-          TableCommand(line);
+          TableCommand(tables, line, s=>client.write, options);
           line = nextline;
           i = 0;
           n = nextline.length;
@@ -235,81 +254,136 @@ function TableServer(folder){
       }
       // client.write(b);
     })
-       
-    function TableCommand(line){
-      // Note: table names are not case sensitive.
-      // There are 3 types of commands, general commands, table commands, and row commands
-      //
-      // generalcommand ...
-      //   saveall, loadall
-      //
-      // tablecommand tablename ...
-      //   newtable, rmtable, setprop, save, load
-      // 
-      // rowcommand tablename rowindex ...
-      //   addrow, getrow, setrow, delrow
-      // 
-      //
-      //let command = "newtable TestTable file.csv a b c d e f g";
-      //let command = "addrow TestTable  33 22 33 44 33 22 33";
-      let parts = command.split(/\s+/);
-      let action = parts[0];
-      let tablename = parts.length > 1? parts[1] : "";
-      let table = tables[tablename];
-
-      if(action == "saveall"){
-        for(let tablename of tables){
-          let table = tables[tablename];
-          table.save(()=> client.write("All tables saved.\n"));
-        }
-      }
-      if(action == "loadall"){
-        for(let tablename of tables){
-          let table = tables[tablename];
-          table.load(()=> client.write("All tables loaded.\n"));
-        }
-      }
-      if(action == "newtable"){
-        let filename = parts[2];
-        let columns = parts.slice(3);
-        if(tablename in tables){
-          throw new Error(`newtable: Table ${tablename} already exists.`);
-        }
-        tables[tablename] = Table(filename, columns);
-      }
-      if(action == "rmtable"){
-        let row = parts.slice(2);
-        table.delRow(row);
-      }
-      if(action == "setprop"){
-      }
-      if(action == "save"){
-        let row = parts.slice(2);
-        table.delRow(row);
-      }
-      if(action == "load"){
-        let row = parts.slice(2);
-        table.delRow(row);
-      }
-      if(action == "addrow"){
-        let row = parts.slice(2);
-        table.addRow(row);
-      }
-      if(action == "getrow"){
-        let key = parts[2];
-        table.getRow(key);
-      }
-      if(action == "setrow"){
-        let row = parts.slice(2);
-        table.setRow(row);
-      }
-      if(action == "delrow"){
-        let row = parts.slice(2);
-        table.delRow(row);
-      }
-    }
   }
 }
+       
+function TableCommand(tables, line, emit, options){
+  if(!options) options = {};
 
+  let folder = options['folder']? options['folder'] : '.';
+  let writeonce = options['writeonce']? true : false;
+  let readonly = options['readonly']? true : false;
 
+  // Note: table names are not case sensitive.
+  // There are 3 types of commands, general commands, table commands, and row commands
+  //
+  // generalcommand ...
+  //   saveall, loadall
+  //
+  // tablecommand tablename ...
+  //   newtable, rmtable, setprop, save, load
+  // 
+  // rowcommand tablename rowindex ...
+  //   addrow, getrow, setrow, delrow
+  // 
+  //
+  //let command = "newtable TestTable file.csv a b c d e f g";
+  //let command = "addrow TestTable  33 22 33 44 33 22 33";
+  let parts = line.split(/\s+/);
+  let action = parts[0];
+  let tablename = parts.length > 1? parts[1] : "";
+  let table = tables[tablename];
+
+  if(action == "saveall"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    for(let tablename of tables){
+      let table = tables[tablename];
+      table.save(()=> emit("All tables saved.\n"));
+    }
+  }
+  if(action == "loadall"){
+    for(let tablename of tables){
+      let table = tables[tablename];
+      table.load(()=> emit("All tables loaded.\n"));
+    }
+  }
+  if(action == "newtable"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    let filename = parts[2];
+    let columns = parts.slice(3);
+    if(tablename in tables){
+      throw new Error(`newtable: Table ${tablename} already exists.`);
+    }
+    tables[tablename] = Table(columns, {filename});
+    emit(`New table "${tablename}" in "${filename}" : ${columns.join(' ') }`)
+  }
+  if(action == "rmtable"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    let row = parts.slice(2);
+    table.delRow(row);
+  }
+  if(action == "setprop"){
+  }
+  if(action == "save"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    let row = parts.slice(2);
+    table.delRow(row);
+  }
+  if(action == "load"){
+    let row = parts.slice(2);
+    table.delRow(row);
+  }
+  if(action == "addrow"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    let row = parts.slice(2);
+    table.addRow(row);
+    emit(`Added row "${table.headers.join(" ")} = ${row.join(', ')}"`);
+  }
+  if(action == "getrow"){
+    let key = parts[2];
+    emit(table.getRow(key).join(','));
+  }
+  if(action == "setrow"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    if(writeonce){
+      emit("Invalid operation. Connection is 'writeonce'.");
+      return;
+    }
+    let row = parts.slice(2);
+    table.setRow(row);
+  }
+  if(action == "delrow"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    if(writeonce){
+      emit("Invalid operation. Connection is 'writeonce'.");
+      return;
+    }
+    let row = parts.slice(2);
+    table.delRow(row);
+  }
+}
+function Test(){
+  let log = s=>console.log(s);
+  let tables = {};
+  TableCommand(tables, "newtable Test Test.csv a b c", log);
+  //console.log(tables);
+  TableCommand(tables, "addrow Test 1 2 3", log);
+  //console.log(tables);
+  TableCommand(tables, "getrow Test 1", log);
+}
+
+if(require.main === module){
+  Test();
+}
 module.exports = Table;
