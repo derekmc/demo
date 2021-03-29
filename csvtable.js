@@ -26,6 +26,8 @@ function Table(headers, options){
   let autoparse = options['autoparse']? true : false;
   let filename = options['filename']? options['filename'] : null;
   let folder = options['folder']? options['folder'] : '.';
+  
+  fs.mkdirSync(folder, {recursive: true});
 
   // checkType(quoted, "boolean");
   // checkType(autoid, "boolean");
@@ -258,11 +260,12 @@ function TableTelnetServer(options){
   }
 }
        
-function TableCommand(tables, line, emit, options){
-  if(!options) options = {};
-  if(!emit) emit = s => console.log(s);
+function TableCommand(tables, args, line){
+  let options = args['options']? args['options'] : {};
+  let emit = args['emit']? args['emit'] : x => console.log(x);
 
   let folder = options['folder']? options['folder'] : '.';
+  //console.log('folder', folder);
   let writeonce = options['writeonce']? true : false;
   let readonly = options['readonly']? true : false;
 
@@ -291,8 +294,8 @@ function TableCommand(tables, line, emit, options){
       emit("Invalid operation. Connection is readonly.");
       return;
     }
-    for(let tablename of tables){
-      let table = tables[tablename];
+    for(const tablename in tables){
+      const table = tables[tablename];
       table.save(()=> emit("All tables saved.\n"));
     }
   }
@@ -312,7 +315,7 @@ function TableCommand(tables, line, emit, options){
     if(tablename in tables){
       throw new Error(`newtable: Table ${tablename} already exists.`);
     }
-    tables[tablename] = Table(columns, {filename});
+    tables[tablename] = Table(columns, {filename, folder});
     emit(`New table "${tablename}" in "${filename}" : ${columns.join(' ') }`)
   }
   if(action == "rmtable"){
@@ -384,16 +387,18 @@ function TableCommand(tables, line, emit, options){
 }
 function Test(){
   let tables = {};
-  TableCommand(tables, "newtable Test Test.csv a b c");
-  TableCommand(tables, "addrow Test 1 2 3");
-  TableCommand(tables, "getrow Test 1");
-  TableCommand(tables, "newtable User User.csv username email psalt phash");
-  TableCommand(tables, 'setprop User autoid true');
-  TableCommand(tables, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
-  TableCommand(tables, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
-  TableCommand(tables, 'getrow User 1');
-  TableCommand(tables, 'getrow User 2');
-  TableCommand(tables, 'save User');
+  let args = {options: {folder: "data/csv"}};
+  TableCommand(tables, args, "newtable Test Test.csv a b c");
+  TableCommand(tables, args, "addrow Test 1 2 3");
+  TableCommand(tables, args, "getrow Test 1");
+  TableCommand(tables, args, "newtable User User.csv username email psalt phash");
+  TableCommand(tables, args, 'setprop User autoid true');
+  TableCommand(tables, args, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
+  TableCommand(tables, args, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
+  TableCommand(tables, args, 'getrow User 1');
+  TableCommand(tables, args, 'getrow User 2');
+  TableCommand(tables, args, 'save User');
+  TableCommand(tables, args, 'saveall');
 }
 
 if(require.main === module){
