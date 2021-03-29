@@ -259,6 +259,7 @@ function TableTelnetServer(options){
        
 function TableCommand(tables, line, emit, options){
   if(!options) options = {};
+  if(!emit) emit = s => console.log(s);
 
   let folder = options['folder']? options['folder'] : '.';
   let writeonce = options['writeonce']? true : false;
@@ -374,13 +375,15 @@ function TableCommand(tables, line, emit, options){
   }
 }
 function Test(){
-  let log = s=>console.log(s);
   let tables = {};
-  TableCommand(tables, "newtable Test Test.csv a b c", log);
-  //console.log(tables);
-  TableCommand(tables, "addrow Test 1 2 3", log);
-  //console.log(tables);
-  TableCommand(tables, "getrow Test 1", log);
+  TableCommand(tables, "newtable Test Test.csv a b c");
+  TableCommand(tables, "addrow Test 1 2 3");
+  TableCommand(tables, "getrow Test 1");
+  TableCommand(tables, "newtable User User.csv username email psalt phash");
+  TableCommand(tables, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
+  TableCommand(tables, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
+  TableCommand(tables, 'getrow User bill');
+  TableCommand(tables, 'getrow User joe');
 }
 
 if(require.main === module){
