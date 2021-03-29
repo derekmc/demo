@@ -21,7 +21,7 @@ function Table(headers, options){
   checkType(headers, "array");
   checkType(options, "object");
 
-  let quoted = options['quoted']? true : false;
+  let quoteall = options['quoteall']? true : false;
   let autoid = options['autoid']? true : false; // generate an id, instead of using first entry.
   let autoparse = options['autoparse']? true : false;
   let filename = options['filename']? options['filename'] : null;
@@ -29,7 +29,7 @@ function Table(headers, options){
   
   fs.mkdirSync(folder, {recursive: true});
 
-  // checkType(quoted, "boolean");
+  // checkType(quoteall, "boolean");
   // checkType(autoid, "boolean");
   // checkType(autoparse, "boolean");
   if(filename) checkType(filename, "string");
@@ -80,9 +80,9 @@ function Table(headers, options){
     return rowid;
   }
   table.setProp = (name, value)=>{
-    if(name == "quoted"){
+    if(name == "quoteall"){
       checkType(value, 'boolean');
-      quoted = value;
+      quoteall = value;
     }
     if(name == "autoid"){
       checkType(value, 'boolean');  
@@ -132,16 +132,16 @@ function Table(headers, options){
       stream.on('finish', after);
     }
     const quotewrap = x=> '"' + x + '"'
-    let headerstr = table.headers.map(quotewrap).join(",");
-    if(autoid) headerstr = '"AutoId",' + headerstr
+    let headerstr = table.headers.map(quoteall? quotewrap : x=>x).join(",");
+    if(autoid) headerstr = (quoteall? '"AutoId",' : "AutoId,") + headerstr
     stream.write(headerstr + "\n");
     //console.log(table);
     for(const key in table.ids){
       const rowid = table.ids[key];
       const row = table.rows[rowid];
       //console.log(key, rowid, row);
-      let rowstr = row.map(quotewrap).join(",");
-      if(autoid) rowstr = `"${rowid}",` + rowstr;
+      let rowstr = rowToString(row);
+      if(autoid) rowstr = `${(quoteall? quotewrap : x=>x)(rowid)},` + rowstr;
       stream.write(rowstr + "\n");
     }
   }
@@ -158,10 +158,22 @@ function Table(headers, options){
   return table;
 
   function rowToString(row){
+    let s = "";
     for(let i=0; i<row.length; ++i){
       let entry = "" + row[i];
-      if(quoted) entry = "\"" + entry.replace(/\\/g, '\\\\').replace(/\"/g, '\\"') + "\"";
+      let special = entry.indexOf('"') >= 0 || entry.indexOf("\n") >= 0 || entry.indexOf(",") >= 0 || entry.indexOf("'") >= 0;
+      if(quoteall || special){
+        try{
+          entry = JSON.stringify(entry);
+        } catch(e){
+          console.warn("csvtable internal function rowToString: row entry could not be stringified with 'JSON.stringify'.  Falling back on manual escaping.", str);
+          entry = "\"" + entry.replace(/\\/g, '\\\\').replace(/\"/g, '\\"') + "\"";
+        }
+      }
+      s += entry;
+      if(i < row.length - 1) s += ",";
     }
+    return s;
   }
   function parseRow(s){
     let row = [];
@@ -390,6 +402,7 @@ function Test(){
   let args = {options: {folder: "data/csv"}};
   TableCommand(tables, args, "newtable Test Test.csv a b c");
   TableCommand(tables, args, "addrow Test 1 2 3");
+  TableCommand(tables, args, "addrow Test hello,world!!!");
   TableCommand(tables, args, "getrow Test 1");
   TableCommand(tables, args, "newtable User User.csv username email psalt phash");
   TableCommand(tables, args, 'setprop User autoid true');
