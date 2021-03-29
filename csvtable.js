@@ -34,7 +34,7 @@ function Table(headers, options){
 
   // store autoids for live table no matter what,
   // the autoid prop, just determines whether that is saved.
-  let currentAutoId = 0;
+  let currentAutoId = 1;
 
   let table = {
     headers: headers,
@@ -83,16 +83,7 @@ function Table(headers, options){
       quoted = value;
     }
     if(name == "autoid"){
-      checkType(value, 'boolean');
-      if(!autoid && value){
-        table.headers.splice(0, 0, "AutoId");
-      }
-      if(autoid && !value){
-        let removed = table.headers.shift();
-        if(removed != "AutoId"){
-          throw new Error("csvtable table.setProp: first header column was unexpectedly not 'AutoId'")
-        }
-      }
+      checkType(value, 'boolean');  
       autoid = value;
     }
     if(name == "autoparse"){
@@ -131,19 +122,29 @@ function Table(headers, options){
     return true;
   }
   table.save = (after)=>{
-    let stream = fs.createWriteStream(filename);
+    const stream = fs.createWriteStream(folder + "/" + filename);
     if(after){
       if(typeof after != "function"){
         throw new Error("csvtable table.save(after): after must be a function.");
       }
       stream.on('finish', after);
     }
-    for(let key of table.rows){
-      let row = table.rows[key];
+    const quotewrap = x=> '"' + x + '"'
+    let headerstr = table.headers.map(quotewrap).join(",");
+    if(autoid) headerstr = '"AutoId",' + headerstr
+    stream.write(headerstr + "\n");
+    //console.log(table);
+    for(const key in table.ids){
+      const rowid = table.ids[key];
+      const row = table.rows[rowid];
+      //console.log(key, rowid, row);
+      let rowstr = row.map(quotewrap).join(",");
+      if(autoid) rowstr = `"${rowid}",` + rowstr;
+      stream.write(rowstr + "\n");
     }
   }
   table.load = (after)=>{
-    let stream = fs.createReadStream(filename);
+    let stream = fs.createReadStream(folder + "/" + filename);
     if(after){
       if(typeof after != "function"){
         throw new Error("csvtable table.load(after): after must be a function.");
@@ -168,8 +169,8 @@ function Table(headers, options){
     for(let i=0; i<s.length; ++i){
       let c = s[i];
       // trim leading whitespace
-      if(i == j && (c == " " || c == "\t")){
-        while(s[j] == " " || s[j] == "\t") ++j;
+      while(i == j && (s[i] == " " || s[i] == "\t")){
+        ++i; ++j;
       }
       if(c == "\"" || c == "\'"){
         quotechar = c;
@@ -180,7 +181,7 @@ function Table(headers, options){
       if(c == "," || i == s.length-1){
         let entry;
         // back up to trim whitespace
-        while(s[i-1]== " " || s[i-1] == "\t") --i;
+        while(s[i-1] == " " || s[i-1] == "\t") --i;
         if(fullquote && s[i-1] == "\""){
           let str = "";
           try{
@@ -323,18 +324,23 @@ function TableCommand(tables, line, emit, options){
     table.delRow(row);
   }
   if(action == "setprop"){
+    if(readonly){
+      emit("Invalid operation. Connection is readonly.");
+      return;
+    }
+    let name = parts[2];
+    let value = JSON.parse(parts[3]);
+    table.setProp(name, value);
   }
   if(action == "save"){
     if(readonly){
       emit("Invalid operation. Connection is readonly.");
       return;
     }
-    let row = parts.slice(2);
-    table.delRow(row);
+    table.save();
   }
   if(action == "load"){
-    let row = parts.slice(2);
-    table.delRow(row);
+    table.load();
   }
   if(action == "addrow"){
     if(readonly){
@@ -342,12 +348,14 @@ function TableCommand(tables, line, emit, options){
       return;
     }
     let row = parts.slice(2);
-    table.addRow(row);
-    emit(`Added row "${table.headers.join(" ")} = ${row.join(', ')}"`);
+    //table.addRow(row);
+    emit(table.addRow(row));
   }
   if(action == "getrow"){
     let key = parts[2];
-    emit(table.getRow(key).join(','));
+    let row = table.getRow(key);
+    if(row) emit(row.join(','));
+    else emit(`Unknown key "${key}"`)
   }
   if(action == "setrow"){
     if(readonly){
@@ -371,7 +379,7 @@ function TableCommand(tables, line, emit, options){
       return;
     }
     let row = parts.slice(2);
-    table.delRow(row);
+    table.deleteRow(row);
   }
 }
 function Test(){
@@ -380,10 +388,12 @@ function Test(){
   TableCommand(tables, "addrow Test 1 2 3");
   TableCommand(tables, "getrow Test 1");
   TableCommand(tables, "newtable User User.csv username email psalt phash");
+  TableCommand(tables, 'setprop User autoid true');
   TableCommand(tables, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
   TableCommand(tables, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
-  TableCommand(tables, 'getrow User bill');
-  TableCommand(tables, 'getrow User joe');
+  TableCommand(tables, 'getrow User 1');
+  TableCommand(tables, 'getrow User 2');
+  TableCommand(tables, 'save User');
 }
 
 if(require.main === module){
