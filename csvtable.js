@@ -21,6 +21,7 @@ function Table(headers, options){
   checkType(headers, "array");
   checkType(options, "object");
 
+  // TODO let savedelay = ; // the minimum time between saving
   let quoteall = options['quoteall']? true : false;
   let autoid = options['autoid']? true : false; // generate an id, instead of using first entry.
   let autoparse = options['autoparse']? true : false;
@@ -124,12 +125,15 @@ function Table(headers, options){
     return true;
   }
   table.save = (after)=>{
-    const stream = fs.createWriteStream(folder + "/" + filename);
+    if(!filename){
+      return after(false);
+    }
+    const stream = fs.createWriteStream(folder + "/" + filename, {encoding: 'utf8'});
     if(after){
       if(typeof after != "function"){
         throw new Error("csvtable table.save(after): after must be a function.");
       }
-      stream.on('finish', after);
+      stream.on('finish', ()=>after(true));
     }
     const quotewrap = x=> '"' + x + '"'
     let headerstr = table.headers.map(quoteall? quotewrap : x=>x).join(",");
@@ -146,14 +150,75 @@ function Table(headers, options){
     }
   }
   table.load = (after)=>{
-    let stream = fs.createReadStream(folder + "/" + filename);
-    if(after){
-      if(typeof after != "function"){
-        throw new Error("csvtable table.load(after): after must be a function.");
-      }
-      stream.on('finish', after);
+    if(!after) after = (success)=> console.log(`Table load ${success? "succeeded" : "failed"}`);
+    if(typeof after != "function"){
+      throw new Error("csvtable table.load(after): after must be a function.");
     }
-    //for(let row of 
+    if(!filename){
+      return after(false);
+    }
+    let stream = fs.createReadStream(folder + "/" + filename, {encoding: 'utf8'});
+    let line = "";
+    let linenumber = 0;
+    let n = line.length;
+
+    //console.log("stream", stream);
+    stream.on('readable', function(){
+      let chunk;
+      while((chunk = stream.read()) != null){
+        readChunk(chunk);
+      }
+      readChunk("\n");
+    })
+    //stream.on('data', readChunk);  
+    stream.on('finish', ()=>{ readChunk("\n"); after(true); });
+    stream.on('error', (err)=>{
+      console.error(err);
+      after(false);
+    })
+
+    console.log(`Reading table ${folder + "/" + filename}`);
+    //readChunk('hey');
+    
+    //readTable(stream);
+    //async function readTable(tableStream){
+   
+    function readChunk(chunk){
+      console.log('chunk', chunk);
+      line += chunk; 
+      let nextline = "";
+      for(let i=n; i<line.length; ++i){
+        if(line[i] == "\n"){
+          nextline = line.substring(i+1);
+          line = line.substring(0, i);
+          let row = [];
+          if(i > 0){
+            row = parseRow(line);
+            if(linenumber == 0){
+              if(!headers || headers.length == 0){
+                headers = row.slice(autoid? 1 : 0);
+              }
+            } else {
+              if(autoid){
+                let id = row[0];
+                row = row.slice(1);
+                table.ids[id] = id;
+                table.rows[id] = row;
+                currentAutoId = Math.max(currentAutoId, id + 1);
+              } else {
+                if(!table.addRow()){
+                  console.warn(`Duplicate row key: ${row[0]}, for row ${JSON.stringify(row)}.`);
+                }
+              }
+            }
+            ++linenumber;
+          }
+          line = nextline;
+          i = 0;
+          n = line.length;
+        }
+      }
+    }
   }
   return table;
 
@@ -175,7 +240,8 @@ function Table(headers, options){
     }
     return s;
   }
-  function parseRow(s){
+  function parseRow(s, options){
+    if(!options) options = [];
     let row = [];
     let j = 0;
     let fullquote = true;
@@ -231,8 +297,11 @@ function Table(headers, options){
   }
 }
 
-Table.HttpServer = TableHttpServer;
-Table.TelnetServer = TableTelnetServer;
+function TableLoad(options){
+  let table = Table([], options);
+  table.load();
+}
+
 
 function TableHttpServer(options){
 }
@@ -401,20 +470,30 @@ function Test(){
   let tables = {};
   let args = {options: {folder: "data/csv"}};
   TableCommand(tables, args, "newtable Test Test.csv a b c");
-  TableCommand(tables, args, "addrow Test 1 2 3");
-  TableCommand(tables, args, "addrow Test hello,world!!!");
-  TableCommand(tables, args, "getrow Test 1");
   TableCommand(tables, args, "newtable User User.csv username email psalt phash");
   TableCommand(tables, args, 'setprop User autoid true');
-  TableCommand(tables, args, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
-  TableCommand(tables, args, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
-  TableCommand(tables, args, 'getrow User 1');
-  TableCommand(tables, args, 'getrow User 2');
-  TableCommand(tables, args, 'save User');
-  TableCommand(tables, args, 'saveall');
+  TableCommand(tables, args, 'load User');
+  setTimeout(()=>{
+    //console.log(tables);
+    //console.log(tables.User.rows);
+    TableCommand(tables, args, "addrow Test 1 2 3");
+    TableCommand(tables, args, "addrow Test hello,world!!!");
+    TableCommand(tables, args, "getrow Test 1");
+    TableCommand(tables, args, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
+    TableCommand(tables, args, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
+    TableCommand(tables, args, 'getrow User 1');
+    TableCommand(tables, args, 'getrow User 2');
+    TableCommand(tables, args, 'save User');
+    TableCommand(tables, args, 'saveall');
+  }, 3000)
 }
 
 if(require.main === module){
   Test();
 }
+Table.TableLoad = TableLoad;
+Table.TableCommand = TableCommand;
+Table.HttpServer = TableHttpServer;
+Table.TelnetServer = TableTelnetServer;
+Table.Test = Test;
 module.exports = Table;
