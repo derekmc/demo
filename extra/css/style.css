@@ -1,0 +1,102 @@
+a { text-decoration: none; color: #000; }
+ul {
+  list-style-type: none;
+  margin-left: 0;
+}
+ul li{
+  margin-bottom: 8px;
+}
+ul li:before {
+  color: #000;
+  content: '-';
+  font-weight: bold;
+  position: absolute;
+  margin-left: -15px;
+}
+*{
+  font-family: Arial, helvetica, sans-serif;
+}
+body{
+  color: #3a3a3a;
+}
+th{
+  text-align: left;
+  font-weight: normal;
+  /*font-size: 130%;*/
+  padding: 5px 10px;
+}
+td{
+  text-align: right;
+  font-weight: normal;
+  /*font-size: 130%;*/
+}
+
+.titlebar{
+  font-variant: small-caps;
+  background: #43d;
+  color: #fff;
+  padding: 40px;
+  text-align: center;
+  margin: 0;
+  margin-left:-8px;
+  margin-right: -8px;
+  margin-top: -8px;
+  font-size: 32px;
+}
+.subtitlebar{
+  background: #226;
+  color: #fff;
+  padding: 4px;
+  margin: 0;
+  margin-left: -8px;
+  margin-right:-8px;
+  text-align: center;
+  font-weight: normal;
+}
+.rightfloat{
+  float: right;
+}
+hr{
+  color: #000;
+}
+h1{
+  text-decoration: none;
+  color: #000;
+  font-weight:normal;
+  font-size: 35px;
+}
+h3{
+  color: #000;
+  text-decoration: underline;
+  font-weight: bold;
+}
+h3.subtitlebar{
+  text-decoration: none;
+}
+h2, h4, h5 {
+  color: #000;
+  font-weight: normal;
+}
+.money{ font-family: serif; }
+.uu { text-decoration: underline; }
+.bb { font-weight: bold; }
+
+#alacartepricetable td {
+ font-family: serif;
+}
+
+footer{
+  text-align: center;
+  background: #555;
+  margin-left: -8px;
+  margin-right: -8px;
+  margin-bottom: -20px;
+  color: #fff;
+  padding: 7px;
+}
+#main{
+  max-width:800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
