@@ -17,8 +17,11 @@ body{
   user-select: none;
 }
 .title-bar .nav a{
+	padding: 9px 6px;
 	text-decoration: none;
-	color: #181818;
+	color: #6a6a6a;
+	font-size: 105%;
+	font-weight: normal;
 }
 .title-bar .nav{
 	margin-top: 30px;
@@ -26,7 +29,17 @@ body{
 	background: #eee;
 	color: #000;
 }
-
+/*
+.title-bar .nav a.active::before{
+	content: '[ ';
+}
+.title-bar .nav a.active::after{
+	content: ']';
+}*/
+.title-bar .nav a.active{
+	color: #282828;
+	font-weight: bold;
+}
 .main-content{
 	padding-bottom: 30px;
 }
