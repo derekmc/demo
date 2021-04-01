@@ -241,7 +241,7 @@ function Table(headers, options){
     return s;
   }
   function parseRow(s, options){
-    // console.log("parsing line", s);
+    console.log("parsing line", s);
     if(!options) options = [];
     let row = [];
     let j = 0;
@@ -260,6 +260,9 @@ function Table(headers, options){
           if(s[i] == "\\") ++i; }
       }
       if(c == "," || i == s.length-1){
+        if(i==s.length-1){
+          ++i;
+        }
         let entry;
         // back up to trim whitespace
         while(s[i-1] == " " || s[i-1] == "\t") --i;
@@ -288,14 +291,14 @@ function Table(headers, options){
         row.push(entry);
         fullquote = true;
         // we backed up to trim whitespace, go forward to comma again.
-        while(s[i] == " " || s[i] == "\t") ++i;
+        while(i<s.length && (s[i] == " " || s[i] == "\t")) ++i;
         j = i+1;
       }
       if(c == "\n"){
         throw new Error("csvtable, internal function 'parseRow' encountered unexpected newline character.");
       }
     }
-    // console.log("parsed row", row);
+    console.log("parsed row", row);
     return row;
   }
 }
