@@ -184,7 +184,7 @@ function Table(headers, options){
     //async function readTable(tableStream){
    
     function readChunk(chunk){
-      console.log('chunk', chunk);
+      // console.log('chunk', chunk.toString());
       line += chunk; 
       let nextline = "";
       for(let i=n; i<line.length; ++i){
@@ -200,7 +200,7 @@ function Table(headers, options){
               }
             } else {
               if(autoid){
-                let id = row[0];
+                let id = parseInt(row[0]);
                 row = row.slice(1);
                 table.ids[id] = id;
                 table.rows[id] = row;
@@ -241,6 +241,7 @@ function Table(headers, options){
     return s;
   }
   function parseRow(s, options){
+    // console.log("parsing line", s);
     if(!options) options = [];
     let row = [];
     let j = 0;
@@ -288,11 +289,13 @@ function Table(headers, options){
         fullquote = true;
         // we backed up to trim whitespace, go forward to comma again.
         while(s[i] == " " || s[i] == "\t") ++i;
+        j = i+1;
       }
       if(c == "\n"){
         throw new Error("csvtable, internal function 'parseRow' encountered unexpected newline character.");
       }
     }
+    // console.log("parsed row", row);
     return row;
   }
 }
