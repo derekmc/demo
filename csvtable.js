@@ -173,7 +173,7 @@ function Table(headers, options){
     //stream.on('data', readChunk);  
     stream.on('finish', ()=>{ readChunk("\n"); after(true); });
     stream.on('error', (err)=>{
-      console.error(err);
+      console.error(`failed to load file '${folder + "/" + filename}`, err);
       after(false);
     })
 
@@ -240,68 +240,76 @@ function Table(headers, options){
     }
     return s;
   }
-  function parseRow(s, options){
-    console.log("parsing line", s);
-    if(!options) options = [];
-    let row = [];
-    let j = 0;
-    let fullquote = true;
-    let quotechar = null;
-    for(let i=0; i<s.length; ++i){
-      let c = s[i];
-      // trim leading whitespace
-      while(i == j && (s[i] == " " || s[i] == "\t")){
-        ++i; ++j;
-      }
-      if(c == "\"" || c == "\'"){
-        quotechar = c;
-        if(i > j) fullquote = false;
-        while(s[++i] != quotechar){
-          if(s[i] == "\\") ++i; }
-      }
-      if(c == "," || i == s.length-1){
-        if(i==s.length-1){
-          ++i;
-        }
-        let entry;
-        // back up to trim whitespace
-        while(s[i-1] == " " || s[i-1] == "\t") --i;
-        if(fullquote && s[i-1] == "\""){
-          let str = "";
-          try{
-            str = s.substring(j, i);
-            entry = JSON.parse(str)
-          } catch(e){
-            console.warn("csvtable internal function parseRow: row entry could not be parsed with 'JSON.parse'.  Falling back on manual unescaping.", str);
-            str = s.substring(j+1, i-1);
-            entry = str.replace(/(?:\\([\\\"\']))/g, '$1');
-          }
-        } else {
-          entry = s.substring(j, i); 
-        }
-        if(autoparse){
-          if(entry == "true") entry = true;
-          if(entry == "false") entry = false;
-          if(entry == "null") entry = null;
-          if(entry == "undefined") entry = undefined;
-          if(entry.match(FloatRegex)) entry = parseFloat(entry);
-          if(entry.match(BigIntRegex)) entry = BigInt(entry);
-          if(entry.match(HexRegex)) entry = parseInt(entry, 16);
-        }
-        row.push(entry);
-        fullquote = true;
-        // we backed up to trim whitespace, go forward to comma again.
-        while(i<s.length && (s[i] == " " || s[i] == "\t")) ++i;
-        j = i+1;
-      }
-      if(c == "\n"){
-        throw new Error("csvtable, internal function 'parseRow' encountered unexpected newline character.");
-      }
+  function parseRow(s){
+    let options = {
+      autoparse: autoparse,
     }
-    console.log("parsed row", row);
-    return row;
+    return CSVParseRow(s, options);
   }
 }
+
+function CSVParseRow(s, options){
+  // console.log("parsing line", s);
+  if(!options) options = {};
+  let row = [];
+  let j = 0;
+  let fullquote = true;
+  let quotechar = null;
+  for(let i=0; i<s.length; ++i){
+    let c = s[i];
+    // trim leading whitespace
+    while(i == j && (s[i] == " " || s[i] == "\t")){
+      ++i; ++j;
+    }
+    if(c == "\"" || c == "\'"){
+      quotechar = c;
+      if(i > j) fullquote = false;
+      while(s[++i] != quotechar){
+        if(s[i] == "\\") ++i; }
+    }
+    if(c == "," || i == s.length-1){
+      if(i==s.length-1){
+        ++i;
+      }
+      let entry;
+      // back up to trim whitespace
+      while(s[i-1] == " " || s[i-1] == "\t") --i;
+      if(fullquote && s[i-1] == "\""){
+        let str = "";
+        try{
+          str = s.substring(j, i);
+          entry = JSON.parse(str)
+        } catch(e){
+          console.warn("csvtable internal function 'CSVParseRow': row entry could not be parsed with 'JSON.parse'.  Falling back on manual unescaping.", str);
+          str = s.substring(j+1, i-1);
+          entry = str.replace(/(?:\\([\\\"\']))/g, '$1');
+        }
+      } else {
+        entry = s.substring(j, i); 
+      }
+      if(options.autoparse){
+        if(entry == "true") entry = true;
+        else if(entry == "false") entry = false;
+        else if(entry == "null") entry = null;
+        else if(entry == "undefined") entry = undefined;
+        else if(entry.match(FloatRegex)) entry = parseFloat(entry);
+        else if(entry.match(BigIntRegex)) entry = BigInt(entry);
+        else if(entry.match(HexRegex)) entry = parseInt(entry, 16);
+      }
+      row.push(entry);
+      fullquote = true;
+      // we backed up to trim whitespace, go forward to comma again.
+      while(i<s.length && (s[i] == " " || s[i] == "\t")) ++i;
+      j = i+1;
+    }
+    if(c == "\n"){
+      throw new Error("csvtable, internal function 'CSVParseRow' encountered unexpected newline character.");
+    }
+  }
+  // console.log("parsed row", row);
+  return row;
+}
+
 
 function TableLoad(options){
   let table = Table([], options);
@@ -369,7 +377,7 @@ function TableCommand(tables, args, line){
   //   addrow, getrow, setrow, delrow
   // 
   //
-  //let command = "newtable TestTable file.csv a b c d e f g";
+  //let command = "newtable TestTable file.csv a, b, c, d, e, f, g";
   //let command = "addrow TestTable  33 22 33 44 33 22 33";
   let parts = line.split(/\s+/);
   let action = parts[0];
@@ -398,7 +406,8 @@ function TableCommand(tables, args, line){
       return;
     }
     let filename = parts[2];
-    let columns = parts.slice(3);
+    let rest = CSVParseRow(parts.slice(3).join(" "), {autoparse: true});
+    let columns = rest;
     if(tablename in tables){
       throw new Error(`newtable: Table ${tablename} already exists.`);
     }
@@ -437,8 +446,7 @@ function TableCommand(tables, args, line){
       emit("Invalid operation. Connection is readonly.");
       return;
     }
-    let row = parts.slice(2);
-    //table.addRow(row);
+    let row = CSVParseRow(parts.slice(2).join(" "), {autoparse: true});
     emit(table.addRow(row));
   }
   if(action == "getrow"){
@@ -456,7 +464,7 @@ function TableCommand(tables, args, line){
       emit("Invalid operation. Connection is 'writeonce'.");
       return;
     }
-    let row = parts.slice(2);
+    let row = CSVParseRow(parts.slice(2).join(" "), {autoparse: true});
     table.setRow(row);
   }
   if(action == "delrow"){
@@ -475,23 +483,24 @@ function TableCommand(tables, args, line){
 function Test(){
   let tables = {};
   let args = {options: {folder: "data/csv"}};
-  TableCommand(tables, args, "newtable Test Test.csv a b c");
-  TableCommand(tables, args, "newtable User User.csv username email psalt phash");
+  TableCommand(tables, args, "newtable Test Test.csv a, b, c");
+  TableCommand(tables, args, "newtable User User.csv username, email, psalt, phash");
   TableCommand(tables, args, 'setprop User autoid true');
   TableCommand(tables, args, 'load User');
   setTimeout(()=>{
     //console.log(tables);
     //console.log(tables.User.rows);
-    TableCommand(tables, args, "addrow Test 1 2 3");
-    TableCommand(tables, args, "addrow Test hello,world!!!");
+    TableCommand(tables, args, "addrow Test 1,2,3");
+    TableCommand(tables, args, "addrow Test hello, world!!!");
     TableCommand(tables, args, "getrow Test 1");
-    TableCommand(tables, args, 'addrow User joe joe@example.com e2k0n3 a23n3o2o');
-    TableCommand(tables, args, 'addrow User bill elevatorrepairman@example.com weihfoij fwonofe');
+    TableCommand(tables, args, 'addrow User joe, joe@example.com, e2k0n3, a23n3o2o');
+    TableCommand(tables, args, 'addrow User bill, elevatorrepairman@example.com, weihfoij, fwonofe');
     TableCommand(tables, args, 'getrow User 1');
     TableCommand(tables, args, 'getrow User 2');
     TableCommand(tables, args, 'save User');
     TableCommand(tables, args, 'saveall');
   }, 3000)
+  console.log('waiting...');
 }
 
 if(require.main === module){
