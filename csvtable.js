@@ -225,7 +225,7 @@ function Table(headers, options){
   function rowToString(row){
     let s = "";
     for(let i=0; i<row.length; ++i){
-      let entry = "" + row[i];
+      let entry = (typeof row[i] == "bigint")? row[i] + "n" : "" + row[i];
       let special = entry.indexOf('"') >= 0 || entry.indexOf("\n") >= 0 || entry.indexOf(",") >= 0 || entry.indexOf("'") >= 0;
       if(quoteall || special){
         try{
