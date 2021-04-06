@@ -56,7 +56,7 @@ function Table(headers, options){
 
   function checkRow(row){
     if(!Array.isArray(row)){
-      throw new Error("csvtable: rows must be an array."); }
+      throw new Error("csvtable: row must be an array."); }
     if(row.length == 0){
       throw new Error("csvtable: row must not be empty."); }
   }
@@ -206,7 +206,7 @@ function Table(headers, options){
                 table.rows[id] = row;
                 currentAutoId = Math.max(currentAutoId, id + 1);
               } else {
-                if(!table.addRow()){
+                if(!table.addRow(row)){
                   console.warn(`Duplicate row key: ${row[0]}, for row ${JSON.stringify(row)}.`);
                 }
               }
@@ -311,9 +311,13 @@ function CSVParseRow(s, options){
 }
 
 
-function TableLoad(options){
+function TableLoad(tablename, folder){
+  if(!folder) folder = "./";
+  let filename = tablename.toLowerCase() + ".csv";
+  let options = {filename: filename, folder: folder, autoload: true};
   let table = Table([], options);
   table.load();
+  return table;
 }
 
 
@@ -383,6 +387,7 @@ function TableCommand(tables, args, line){
   let action = parts[0];
   let tablename = parts.length > 1? parts[1] : "";
   let table = tables[tablename];
+  let filename = tablename.toLowerCase() + ".csv";
 
   if(action == "saveall"){
     if(readonly){
@@ -395,17 +400,35 @@ function TableCommand(tables, args, line){
     }
   }
   if(action == "loadall"){
-    for(let tablename of tables){
+    let filenames = {};
+    // if there's a conflict in memory table and filesystem table,
+    // in memory takes precedent;
+
+    for(const tablename in tables){
+      filenames[tablename] = tablename;
       let table = tables[tablename];
-      table.load(()=> emit("All tables loaded.\n"));
+      table.load(()=> emit(`'${tablename}' loaded.`));
     }
+    fs.readdir(folder, (err, files) => {
+      files.forEach(file => {
+        let match = file.match(/^(.*)\.csv$/);
+        if(match){
+          let name = match[1].toLowerCase();
+          if(name in tables){
+            return;
+          }
+          let table = TableLoad(name, folder);
+          tables[name] = table;
+        }
+      });
+    });
   }
   if(action == "newtable"){
     if(readonly){
       emit("Invalid operation. Connection is readonly.");
       return;
     }
-    let filename = parts[2];
+    let filename = parts[1] + ".csv";
     let rest = CSVParseRow(parts.slice(3).join(" "), {autoparse: true});
     let columns = rest;
     if(tablename in tables){
@@ -436,10 +459,12 @@ function TableCommand(tables, args, line){
       emit("Invalid operation. Connection is readonly.");
       return;
     }
-    table.save();
+    if(table) table.save();
+    else emit(`No such table '${tablename}'`);
   }
   if(action == "load"){
-    table.load();
+    if(table) table.load();
+    else emit(`No such table '${tablename}'`);
   }
   if(action == "addrow"){
     if(readonly){
@@ -453,7 +478,7 @@ function TableCommand(tables, args, line){
     let key = parts[2];
     let row = table.getRow(key);
     if(row) emit(row.join(','));
-    else emit(`Unknown key "${key}"`)
+    else emit(`Unknown key "${key}"`);
   }
   if(action == "setrow"){
     if(readonly){
@@ -483,21 +508,24 @@ function TableCommand(tables, args, line){
 function Test(){
   let tables = {};
   let args = {options: {folder: "data/csv"}};
-  TableCommand(tables, args, "newtable Test Test.csv a, b, c");
-  TableCommand(tables, args, "newtable User User.csv username, email, psalt, phash");
-  TableCommand(tables, args, 'setprop User autoid true');
+  TableCommand(tables, args, "loadall");
+  setTimeout(()=>console.log('tables', tables), 300);
+  return;
+  TableCommand(tables, args, "newtable test a, b, c");
+  TableCommand(tables, args, "newtable user username, email, psalt, phash");
+  TableCommand(tables, args, 'setprop user autoid true');
   TableCommand(tables, args, 'load User');
   setTimeout(()=>{
     //console.log(tables);
     //console.log(tables.User.rows);
-    TableCommand(tables, args, "addrow Test 1,2,3");
-    TableCommand(tables, args, "addrow Test hello, world!!!");
-    TableCommand(tables, args, "getrow Test 1");
-    TableCommand(tables, args, 'addrow User joe, joe@example.com, e2k0n3, a23n3o2o');
-    TableCommand(tables, args, 'addrow User bill, elevatorrepairman@example.com, weihfoij, fwonofe');
-    TableCommand(tables, args, 'getrow User 1');
-    TableCommand(tables, args, 'getrow User 2');
-    TableCommand(tables, args, 'save User');
+    TableCommand(tables, args, "addrow test 1,2,3");
+    TableCommand(tables, args, "addrow test hello, world!!!");
+    TableCommand(tables, args, "getrow test 1");
+    TableCommand(tables, args, 'addrow user joe, joe@example.com, e2k0n3, a23n3o2o');
+    TableCommand(tables, args, 'addrow user bill, elevatorrepairman@example.com, weihfoij, fwonofe');
+    TableCommand(tables, args, 'getrow user 1');
+    TableCommand(tables, args, 'getrow user 2');
+    TableCommand(tables, args, 'save user');
     TableCommand(tables, args, 'saveall');
   }, 3000)
   console.log('waiting...');
