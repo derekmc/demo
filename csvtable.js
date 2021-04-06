@@ -197,6 +197,17 @@ function Table(headers, options){
             if(linenumber == 0){
               if(!headers || headers.length == 0){
                 headers = row.slice(autoid? 1 : 0);
+              } else {
+                fileheaders = row.slice(autoid? 1 : 0);
+                let match = headers.length == fileheaders.length;
+                for(let i=0; match && i<headers.length; ++i){
+                  if(headers[i].trim().toLowerCase() != fileheaders[i].trim().toLowerCase()){
+                    match = false;
+                  }
+                }
+                if(!match){
+                  console.warn(`Table '${tablename}' expected headers do not match fileheaders.\n  ${headers}\n  ${fileheaders}`)
+                }
               }
             } else {
               if(autoid){
@@ -507,7 +518,7 @@ function TableCommand(tables, args, line){
 }
 function Test(){
   let tables = {};
-  let args = {options: {folder: "data/csv"}};
+  let args = {options: {folder: "data/csv", emit: x => console.log(x)}};
   TableCommand(tables, args, "loadall");
   setTimeout(()=>console.log('tables', tables), 300);
   return;
