@@ -6,7 +6,6 @@ body{
   margin: 0;
   font-family: sans-serif;
 }
-
 .title-bar{
   display: block;
   margin: 0;
@@ -29,6 +28,15 @@ body{
 	background: #eee;
 	color: #000;
 }
+a {
+  color: #22a;
+}
+a:visited{
+  color: #82a;
+}
+td{
+  padding: 4px;
+}
 /*
 .title-bar .nav a.active::before{
 	content: '[ ';
@@ -37,8 +45,12 @@ body{
 	content: ']';
 }*/
 .title-bar .nav a.active{
-	color: #282828;
-	font-weight: bold;
+  color: #282828;
+  font-weight: bold;
+}
+.title-bar .nav a.username{
+  background: #ccc;
+  color: white;
 }
 .main-content{
 	padding-bottom: 30px;
