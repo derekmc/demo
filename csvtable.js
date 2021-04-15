@@ -332,16 +332,18 @@ function TableLoad(tablename, folder){
 }
 
 
-function TableHttpServer(options){
+function HttpServer(options){
 }
-function TableTelnetServer(options){
+function TelnetServer(options){
 
   let tables = {};
   if(!options) options= {};
+  let port = 8081;
+  if(options['port']) port = options['port'];
 
   // this is a telnet server
-  // 'https://www.npmjs.com/package/telnet'
-  return function(client){
+  // 'https://www.npmjs.com/package/telnet
+  telnet.createServer(function(client){
     client.do.transmit_binary();
     client.do.window_size();
 
@@ -359,7 +361,7 @@ function TableTelnetServer(options){
         if(line[i] == "\n"){
           nextline = line.substring(i);
           line = line.substring(0, i);
-          TableCommand(tables, line, s=>client.write, options);
+          TableCommand(tables, {options: options}, line);
           line = nextline;
           i = 0;
           n = nextline.length;
@@ -367,7 +369,8 @@ function TableTelnetServer(options){
       }
       // client.write(b);
     })
-  }
+  }).listen(port);
+  console.log(`CSVTable: telnet server listening on port ${port}`);
 }
        
 function TableCommand(tables, args, line){
@@ -541,13 +544,13 @@ function Test(){
   }, 3000)
   console.log('waiting...');
 }
-
 if(require.main === module){
-  Test();
+  //Test();
+  TelnetServer();
 }
 Table.TableLoad = TableLoad;
 Table.TableCommand = TableCommand;
-Table.HttpServer = TableHttpServer;
-Table.TelnetServer = TableTelnetServer;
+Table.HttpServer = HttpServer;
+Table.TelnetServer = TelnetServer;
 Table.Test = Test;
 module.exports = Table;

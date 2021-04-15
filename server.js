@@ -9,8 +9,11 @@ const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('static'));
+app.set('view engine', 'pug');
 
-
+app.get('/', function (req, res) {
+  res.render('index', { title: 'Hey', message: 'Hello there!' })
+})
 app.post('/submit', function (req, res) {
   console.log(req.body);
   res.send(`Hello ${req.body.name}`);
