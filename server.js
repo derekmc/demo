@@ -9,9 +9,9 @@ const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('static'));
-app.set('view engine', 'pug');
+app.set('view engine', 'hbs');
 
-app.get('/', function (req, res) {
+app.get('/hello', function (req, res) {
   res.render('index', { title: 'Hey', message: 'Hello there!' })
 })
 app.post('/submit', function (req, res) {
@@ -20,6 +20,7 @@ app.post('/submit', function (req, res) {
 })
 
 app.listen(3000);
+console.log("running on port 3000");
 
 /*
 const http = require('http');
