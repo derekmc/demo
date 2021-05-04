@@ -32,7 +32,8 @@ a {
   color: #22a;
 }
 a:visited{
-  color: #82a;
+  color: #44a;
+  /*color: #82a;*/
 }
 td{
   padding: 4px;
@@ -63,8 +64,9 @@ td{
   padding: 8px 32px;
 }
 
-input[type="text"]{
-	width: 180px;
+input[type="text"], input[type="password"], input[type="email"]{
+	width: 240px;
+  font-size: 18px;
 }
 
 input[type="submit"], input[type="button"]{
